@@ -69,6 +69,71 @@ def get_fret_positions(string_note, target_notes):
     positions.append('X')  # allow muting
     return positions
 
+# ------------------ playability & scoring ------------------ #
+def voicing_is_playable(voicing):
+    frets = [f for f in voicing if f != 'X']
+    if not frets:
+        return False
+    if len([f for f in frets if f > 0]) > MAX_FINGERS:
+        return False
+    span = (max(frets) - min(frets)) if frets else 0
+    if span > FRET_RANGE:
+        return False
+    return True
+
+def estimate_finger_order_penalty(voicing):
+    # simple monotonic left-to-right check: descending frets -> awkward
+    last = None
+    for f in voicing:
+        if f in ('X', 0):
+            continue
+        if last is not None and f < last:
+            return 10
+        last = f
+    return 0
+
+def pitch_classes_in_voicing(voicing):
+    pcs = set()
+    for s, f in zip(STRINGS, voicing):
+        n = get_note_from_string_fret(s, f)
+        if n:
+            pcs.add(n[:-1])
+    return pcs
+
+def covers_chord(voicing, chord_pcs):
+    pcs = pitch_classes_in_voicing(voicing)
+    return pcs.issubset(chord_pcs) and len(pcs) >= min(3, len(chord_pcs))
+
+def overlap_count(v1, v2):
+    return len(pitch_classes_in_voicing(v1) & pitch_classes_in_voicing(v2))
+
+# Neutral score: open strings and compactness; penalize awkward order
+def neutral_score(voicing):
+    open_count = voicing.count(0)
+    avg_fret = sum((f if isinstance(f, int) else 5) for f in voicing) / len(voicing)
+    penalty = estimate_finger_order_penalty(voicing)
+    return (penalty, -(open_count), avg_fret)
+
+# Bridge+Open preference: more opens, and among fretted notes, higher average fret (closer to bridge)
+def bridge_open_score(voicing):
+    open_count = voicing.count(0)
+    fretted = [f for f in voicing if isinstance(f, int) and f > 0]
+    avg_fret_fretted = (sum(fretted) / len(fretted)) if fretted else 0
+    penalty = estimate_finger_order_penalty(voicing)
+    return (penalty, -(open_count), -avg_fret_fretted)
+
+# Region score: prefer average fret inside [lo, hi]
+def region_score(voicing, lo, hi):
+    ints = [f for f in voicing if f != 'X']
+    if not ints:
+        return (999, )
+    avg = sum(ints) / len(ints)
+    # distance outside region center
+    center = (lo + hi) / 2.0
+    dist = abs(avg - center)
+    # keep neutral goodness as tiebreaker
+    return (dist, ) + neutral_score(voicing)
+
 
 class GuitarChordAnalyzer:
     """A class for analyzing guitar chords and their properties."""
