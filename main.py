@@ -19,6 +19,56 @@ FRET_RANGE = 4
 MAX_FINGERS = 4
 MAX_FRET = 12
 
+# ------------------ helpers: pitch, notes, strings ------------------ #
+def parse_note(note):
+    for i, ch in enumerate(note):
+        if ch.isdigit():
+            return note[:i], int(note[i:])
+    raise ValueError(f"Invalid note: {note}")
+
+def note_to_semitone(note):
+    name, octave = parse_note(note)
+    return NOTE_ORDER.index(name) + 12 * octave
+
+def semitone_to_note(semitone):
+    return f"{NOTE_ORDER[semitone % 12]}{semitone // 12}"
+
+def get_note_from_string_fret(base_note, fret):
+    if fret == 'X':
+        return None
+    return semitone_to_note(note_to_semitone(base_note) + int(fret))
+
+def get_chord_notes_from_voicing(voicing):
+    notes = []
+    for string_note, fret in zip(STRINGS, voicing):
+        note = get_note_from_string_fret(string_note, fret)
+        if note:
+            notes.append(note[:-1])  # pitch-class only
+    return sorted(set(notes))
+
+def determine_root_note(voicing):
+    # prefer an open-string root if present
+    for string_note, fret in zip(STRINGS, voicing):
+        if fret == 0:
+            note = get_note_from_string_fret(string_note, fret)
+            return note[:-1] if note else None
+    # otherwise the first non-muted string from low to high
+    for string_note, fret in zip(STRINGS, voicing):
+        if fret != 'X':
+            note = get_note_from_string_fret(string_note, fret)
+            return note[:-1] if note else None
+    return None
+
+def get_fret_positions(string_note, target_notes):
+    base_semitone = note_to_semitone(string_note)
+    positions = []
+    for fret in range(0, MAX_FRET + 1):
+        note = semitone_to_note(base_semitone + fret)
+        if note[:-1] in target_notes:
+            positions.append(fret)
+    positions.append('X')  # allow muting
+    return positions
+
 
 class GuitarChordAnalyzer:
     """A class for analyzing guitar chords and their properties."""
