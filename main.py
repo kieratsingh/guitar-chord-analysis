@@ -134,6 +134,32 @@ def region_score(voicing, lo, hi):
     # keep neutral goodness as tiebreaker
     return (dist, ) + neutral_score(voicing)
 
+# --------------- dexterity (1 easiest ... 5 hardest) --------------- #
+def dexterity_score(voicing):
+    frets = [f for f in voicing if f != 'X']
+    if not frets:
+        return 1.0
+    span = (max(frets) - min(frets)) if frets else 0
+    fingers_used = len([f for f in frets if f > 0])
+    muted = voicing.count('X')
+    opens = voicing.count(0)
+    order_pen = estimate_finger_order_penalty(voicing)
+
+    span_n = min(span / max(1, FRET_RANGE), 1.0)
+    fingers_n = min(fingers_used / max(1, MAX_FINGERS), 1.0)
+    muted_n = min(muted / 6.0, 1.0)
+    opens_n = 1.0 - min(opens / 6.0, 1.0)
+    order_n = 1.0 if order_pen > 0 else 0.0
+
+    difficulty_0_1 = (
+        0.35 * span_n +
+        0.30 * fingers_n +
+        0.15 * muted_n +
+        0.10 * order_n +
+        0.10 * opens_n
+    )
+    return round(1 + 4 * max(0.0, min(1.0, difficulty_0_1)), 2)
+
 
 class GuitarChordAnalyzer:
     """A class for analyzing guitar chords and their properties."""
